@@ -46,4 +46,4 @@ This is a good foundation to start on but I look forward to learning more SQL as
 ## Appendix
 
 -   [GitHub Repository](https://github.com/Spencerconway0/ibm-6500-sql-learning-portfolio.git)
--   [Published Introduction to SQL Report](https://spencerconway0.github.io/ibm-6500-sql-learning-portfolio/introduction-to-sql.html)
+-   [Published Introduction to SQL Report](https://spencerconway0.github.io/ibm-6500-sql-learning-portfolio/introduction-to-sql.html?refresh=1)
