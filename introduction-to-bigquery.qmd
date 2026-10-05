@@ -16,7 +16,7 @@ format:
 
 I completed DataCamp's Introduction to BigQuery course on october 4, 2026. Including all four chapters show 100% completion.
 
-![DataCamp statement of accomplishment for Spencer Conway, Introduction to BigQuery.](images/introduction-to-bigquery-certificate.png)
+![](images/clipboard-2420520700.png)
 
 ## BigQuery Architecture and Structure
 
