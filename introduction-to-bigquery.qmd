@@ -1,0 +1,147 @@
+---
+title: "Introduction to BigQuery: Course Completion and Learning Notes"
+author: "Spencer Conway"
+date: "2026-10-05"
+format:
+  html:
+    toc: true
+    toc-title: "Contents"
+    toc-depth: 3
+    number-sections: true
+    smooth-scroll: true
+    embed-resources: true
+---
+
+## Course-Completion Evidence
+
+I completed DataCamp's Introduction to BigQuery course on october 4, 2026. Including all four chapters show 100% completion.
+
+![DataCamp statement of accomplishment for Spencer Conway, Introduction to BigQuery.](images/introduction-to-bigquery-certificate.png)
+
+## BigQuery Architecture and Structure
+
+### Main ideas and terminology
+
+-   BigQuery is Google's cloud data warehouse. It lets us analyze large amounts of data using SQL.
+-   Serverless means Google handles the servers and infrastructure.
+-   Storage and computing are separate. One holds the data, and the other processes queries.
+-   A **project** contains resources, a **dataset** groups tables, and a **table** contains rows and columns.
+-   A **schema** describes the columns and their data types.
+
+### Example and procedure
+
+To check a table, select the project and dataset in BigQuery, open the table, and review its schema and preview. Then write a query using the table's full name.
+
+``` sql
+SELECT post_id, post_type, likes
+FROM `example-project.rkr_marketing.instagram_posts`
+LIMIT 10;
+```
+
+This shows ten posts and their likes. The backticks surround the full table name. In this example, `example-project` is a placeholder project, `rkr_marketing` is a dataset, and `instagram_posts` is a table. These are practice examples, not actual RKR data or query results.
+
+### CEP application
+
+For RKR, we could organize Instagram, website, and survey data in separate tables within the same dataset. That would make the information easier to find and use together.
+
+## Writing queries and data types
+
+### Main ideas and terminology
+
+-   `SELECT` chooses columns; `FROM` chooses the table.
+-   `WHERE` filters rows, and `ORDER BY` sorts results.
+-   Common types include `STRING` for text, `INT64` for whole numbers, `FLOAT64` for decimals, and `BOOL` for true/false.
+-   `DATE` stores a calendar date; `TIMESTAMP` stores a point in time.
+-   An `ARRAY` holds multiple values. A `STRUCT` groups related fields.
+
+For loading a CSV, choose the dataset, create a table, select the source file and CSV format, and check the destination name and schema. After loading, preview the table to confirm that the fields look correct. For example, likes should be numeric so they can be added or averaged.
+
+### SQL example
+
+``` sql
+SELECT post_id, post_type, likes
+FROM `example-project.rkr_marketing.instagram_posts`
+WHERE post_type = 'Reel'
+ORDER BY likes DESC;
+```
+
+This returns only Reels and sorts them from most likes to fewest. `post_id` identifies each post, `post_type` describes its format, and `likes` is its like count.
+
+### CEP application
+
+This would help me compare RKR's Reels without mixing them with other post formats. Checking data types first would also help prevent problems when calculating engagement.
+
+## Querying data in BigQuery
+
+### Main ideas and terminology
+
+-   `COUNT`, `SUM`, and `AVG` summarize data.
+-   `GROUP BY` creates a summary for each category.
+-   A common table expression, or **CTE**, uses `WITH` to name a query result for use in the same statement.
+-   Window functions use `OVER` to calculate across related rows while keeping individual rows. For example, `RANK() OVER (ORDER BY likes DESC)` ranks posts by likes.
+
+### SQL example
+
+``` sql
+WITH post_summary AS (
+  SELECT
+    post_type,
+    COUNT(*) AS number_of_posts,
+    AVG(likes) AS average_likes
+  FROM `example-project.rkr_marketing.instagram_posts`
+  GROUP BY post_type
+)
+SELECT *
+FROM post_summary
+ORDER BY average_likes DESC;
+```
+
+The CTE creates a summary by post format. The final query sorts the formats by average likes. `number_of_posts` and `average_likes` are names assigned to the calculated columns, not existing fields in the original table.
+
+### CEP application
+
+This could show which RKR post formats tend to receive more likes. I would also check reach and the number of posts before deciding that a format performs better. Likes alone do not show whether someone made a reservation.
+
+## Data management and optimization
+
+### Main ideas and terminology
+
+-   `INNER JOIN` keeps matching rows from both tables.
+-   `LEFT JOIN` keeps all rows from the left table, including those without a match.
+-   `RIGHT JOIN` keeps all rows from the right table; `FULL OUTER JOIN` keeps unmatched rows from both.
+-   `CROSS JOIN` creates combinations of rows. With `UNNEST`, it can expand an array into rows.
+-   `INSERT`, `UPDATE`, and `DELETE` add, change, and remove data.
+-   Select only the columns needed and filter the relevant dates. A `LIMIT` alone does not reduce the bytes scanned for a regular table query.
+-   Partitioning divides a table into sections, often by date. Filtering the partition column can reduce how much data a query reads.
+
+### SQL example
+
+``` sql
+SELECT
+  p.post_id,
+  p.post_type,
+  e.likes,
+  e.comments
+FROM `example-project.rkr_marketing.posts` AS p
+LEFT JOIN `example-project.rkr_marketing.engagement` AS e
+  ON p.post_id = e.post_id
+WHERE p.post_date >= DATE '2026-09-01'
+  AND p.post_date < DATE '2026-10-01';
+```
+
+Here, `posts` holds post details and `engagement` holds likes and comments. `p` and `e` are short table aliases. The query joins them using `post_id` and returns September posts, including posts without matching engagement records. This example assumes one engagement record per post; duplicate matches could create extra rows.
+
+### CEP application
+
+I could use this to connect RKR content details with engagement metrics. Keeping unmatched posts would help identify missing data. Selecting a specific month would also make comparisons more consistent.
+
+## Overall Reflection and Future Reference
+
+BigQuery adds more than SQL syntax. It also involves knowing where the data is stored, checking its structure, and thinking about how much data a query processes. The most useful concepts for my project are filtering, grouping, and joining tables.
+
+Arrays, STRUCTs, and window functions are the areas I would review again because they are less familiar than basic queries. These notes give me a starting point for practice. For RKR, BigQuery could help summarize Instagram engagement and organize other marketing data. If we had access to GA4 exports, it could also help examine website events alongside campaign information. I would still need a reliable way to connect those sources before making claims about reservations.
+
+## Appendix: Publication Links
+
+-   **GitHub Repository:** [IBM 6500 SQL Learning Portfolio](https://github.com/spencerconway0/ibm-6500-sql-learning-portfolio)
+-   **Published Introduction to BigQuery Report:** [Introduction to BigQuery](https://spencerconway0.github.io/ibm-6500-sql-learning-portfolio/introduction-to-bigquery.html)
