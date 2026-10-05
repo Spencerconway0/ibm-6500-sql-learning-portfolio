@@ -1,0 +1,15 @@
+---
+title: "IBM 6500 SQL Learning Portfolio"
+author: "Spencer Conway"
+---
+
+**Student:** Spencer Conway  
+**Course:** IBM 6500
+
+This portfolio collects my DataCamp completion evidence and learning notes for SQL and BigQuery. I plan to use it as a reference for marketing analytics and my culminating experience project.
+
+## Reports
+
+- [Introduction to SQL](introduction-to-sql.html)
+- [Introduction to BigQuery](introduction-to-bigquery.html)
+- Intermediate SQL (to be completed)
