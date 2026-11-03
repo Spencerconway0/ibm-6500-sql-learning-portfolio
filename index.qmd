@@ -12,4 +12,4 @@ This portfolio collects my DataCamp completion evidence and learning notes for S
 
 - [Introduction to SQL](introduction-to-sql.html)
 - [Introduction to BigQuery](introduction-to-bigquery.html)
-- Intermediate SQL (to be completed)
+- [Intermediate SQL](intermediate-sql.html)
