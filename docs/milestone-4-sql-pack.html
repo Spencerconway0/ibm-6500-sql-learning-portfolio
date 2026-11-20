@@ -292,11 +292,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb1-1"><a href="#c
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> event_name <span class="kw">IN</span> (<span class="st">&#39;begin_checkout&#39;</span>, <span class="st">&#39;purchase&#39;</span>)</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> event_timestamp <span class="kw">DESC</span>, event_name, user_pseudo_id</span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">LIMIT</span> <span class="dv">25</span>;</span></code></pre></div>
-<p>This query shows up to 25 recent checkout-start or purchase event
-rows from the first three days of November. I would use it to check
-whether both events are being captured and see the fields available on
-individual records. The report date follows the GA4 property’s time
-zone, while the timestamp is displayed in UTC.</p>
+<p>I started with a quick look at the first three days of November to
+see which checkout events show up in the export. The output gives me up
+to 25 of the latest checkout starts and purchases, along with the device
+and user ID when available. The activity date uses the property’s time
+zone, and the timestamp is in UTC.</p>
 <h2 id="count-daily-shopping-activity">2. Count daily shopping
 activity</h2>
 <div class="sourceCode" id="cb2"><pre
@@ -310,11 +310,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb2-1"><a href="#c
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> event_name <span class="kw">IN</span> (<span class="st">&#39;view_item&#39;</span>, <span class="st">&#39;add_to_cart&#39;</span>, <span class="st">&#39;purchase&#39;</span>)</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> activity_date, event_name</span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> activity_date, event_name;</span></code></pre></div>
-<p>Each row shows the number of times a shopping event was recorded and
-how many distinct pseudonymous IDs recorded it on that date. Comparing
-those columns helps show when activity comes from repeat actions by the
-same IDs. Missing IDs still contribute to the event count, and adding
-daily distinct counts would count returning IDs more than once.</p>
+<p>For each day, I wanted to see how many times people viewed an item,
+added it to their cart, or made a purchase. Putting the event count next
+to the count of unique IDs helps me spot repeat activity. Events with a
+missing ID still count as events, and the same ID can appear in the
+totals on multiple days.</p>
 <h2 id="compare-daily-purchase-revenue-by-device">3. Compare daily
 purchase revenue by device</h2>
 <div class="sourceCode" id="cb3"><pre
@@ -329,11 +329,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb3-1"><a href="#c
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> event_name <span class="op">=</span> <span class="st">&#39;purchase&#39;</span></span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> purchase_date, device_category</span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> purchase_date, purchase_revenue_usd <span class="kw">DESC</span>, device_category;</span></code></pre></div>
-<p>This groups purchase event rows by day and device category and sums
-the recorded USD purchase revenue. I would use it to compare sales
-patterns and check whether some purchase events are missing revenue.
-Refunds are outside this calculation, and repeated purchase events can
-inflate the sum.</p>
+<p>I wanted to see how much purchase revenue came from each device type
+on a given day. The two counts also make it easy to spot days when
+purchases were recorded without a dollar amount. The totals are in USD
+before refunds, and duplicate purchase events could make them look
+higher.</p>
 <h2 id="rank-pages-by-recorded-views">4. Rank pages by recorded
 views</h2>
 <div class="sourceCode" id="cb4"><pre
@@ -367,12 +367,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb4-1"><a href="#c
 <span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> page_url</span>
 <span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> page_view_events <span class="kw">DESC</span>, page_url</span>
 <span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="kw">LIMIT</span> <span class="dv">15</span>;</span></code></pre></div>
-<p>This extracts the string parameter <code>page_location</code> and
-ranks the 15 most-viewed URLs for the first week. I removed query
-strings and fragments so tagged links to the same URL can be counted
-together. This helps identify which pages get the most attention, though
-pages that use query strings to display different content can be
-combined.</p>
+<p>To see which pages got the most views in the first week, I pulled the
+URL from the <code>page_location</code> string parameter. I dropped
+query strings and fragments so links with different tracking tags count
+toward the same page. One trade-off is that URLs with query strings that
+change the actual content can get grouped together too.</p>
 <h2 id="measure-tracked-engagement-by-device">5. Measure tracked
 engagement by device</h2>
 <div class="sourceCode" id="cb5"><pre
@@ -398,12 +397,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb5-1"><a href="#c
 <span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> engagement_events</span>
 <span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> device_category</span>
 <span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> total_engagement_seconds <span class="kw">DESC</span>, device_category;</span></code></pre></div>
-<p>This reads the integer <code>engagement_time_msec</code> parameter
-and converts milliseconds to seconds. Total seconds show how much
-engagement time was recorded on each device category, and the event
-counts show how often the parameter was populated. The average is
-calculated across events that carry a value, so its unit is seconds per
-measured event.</p>
+<p>I pulled <code>engagement_time_msec</code> as an integer and divided
+it by 1,000 so the numbers would be easier to read in seconds. By device
+type, I can compare the total tracked time and see how many events had
+an engagement value. The average only includes events with that
+value.</p>
 <h2 id="identify-first-visit-and-returning-browser-ids">6. Identify
 first-visit and returning browser IDs</h2>
 <div class="sourceCode" id="cb6"><pre
@@ -427,11 +425,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb6-1"><a href="#c
 <span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> page_view_events <span class="op">&gt;</span> <span class="dv">0</span></span>
 <span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> visitor_group</span>
 <span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> visitor_group;</span></code></pre></div>
-<p>The CTE builds one row per browser ID, then compares page viewing for
-IDs with and without a recorded first visit in November. I would use it
-to see whether first-visit IDs view fewer pages per ID during the month.
-The group without a first visit is a returning-visitor proxy because an
-event can be missing and one person can have several browser IDs.</p>
+<p>I used a CTE to get one row per browser ID before comparing how many
+pages each group viewed in November. I wanted to see if IDs with a
+recorded first visit looked at fewer pages on average. An ID without a
+first visit is my best guess at a returning visitor here, since events
+can be missing and someone can use more than one browser.</p>
 <h2 id="find-the-share-of-november-revenue-by-weekday">7. Find the share
 of November revenue by weekday</h2>
 <div class="sourceCode" id="cb7"><pre
@@ -458,11 +456,11 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb7-1"><a href="#c
 <span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> weekday_revenue <span class="kw">AS</span> w</span>
 <span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="kw">CROSS</span> <span class="kw">JOIN</span> monthly_revenue <span class="kw">AS</span> m</span>
 <span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span> <span class="kw">BY</span> w.weekday_number;</span></code></pre></div>
-<p>This joins each weekday’s purchase revenue to a single monthly total
-so each row can show its share of November revenue. I would use the
-result to identify which weekdays contributed the most in this period.
-The percentages are shares of actual revenue in the window, so weekdays
-that occur more often can have a higher share.</p>
+<p>I wanted to know which days of the week brought in the biggest share
+of November’s purchase revenue. I joined the weekday totals to the
+monthly total so I could calculate that percentage for each day of the
+week. Some weekdays occur more often in the month, which can give them a
+bigger share.</p>
 <h2 id="measure-progression-from-checkout-to-purchase">8. Measure
 progression from checkout to purchase</h2>
 <div class="sourceCode" id="cb8"><pre
@@ -500,13 +498,12 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb8-1"><a href="#c
 <span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">AS</span> checkout_to_purchase_pct</span>
 <span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> session_steps</span>
 <span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> first_checkout_at <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span>;</span></code></pre></div>
-<p>This counts sessions with a checkout start that also recorded a
-purchase at a strictly later timestamp and reports the percentage. It
-pairs <code>user_pseudo_id</code> with <code>ga_session_id</code>
-because the session ID can be shared by different users. The result
-estimates checkout completion for the observed window. It excludes
-missing identifiers and timestamp ties, and a session that completes
-after the window can be counted as incomplete.</p>
+<p>Of the sessions that started checkout, how many went on to make a
+purchase? I used both the user ID and the session ID to keep different
+users’ sessions from getting lumped together. A purchase counts only if
+its timestamp is later than the first checkout start in the same
+session. Sessions without both IDs are left out, and a purchase after
+November won’t show up in this window.</p>
 <h2 id="appendix">Appendix</h2>
 <ul>
 <li><a
