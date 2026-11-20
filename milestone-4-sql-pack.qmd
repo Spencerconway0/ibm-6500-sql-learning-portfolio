@@ -28,7 +28,7 @@ ORDER BY event_timestamp DESC, event_name, user_pseudo_id
 LIMIT 25;
 ```
 
-This query shows up to 25 recent checkout-start or purchase event rows from the first three days of November. I would use it to check whether both events are being captured and see the fields available on individual records. The report date follows the GA4 property's time zone, while the timestamp is displayed in UTC.
+I started with a quick look at the first three days of November to see which checkout events show up in the export. The output gives me up to 25 of the latest checkout starts and purchases, along with the device and user ID when available. The activity date uses the property's time zone, and the timestamp is in UTC.
 
 ## 2. Count daily shopping activity
 
@@ -45,7 +45,7 @@ GROUP BY activity_date, event_name
 ORDER BY activity_date, event_name;
 ```
 
-Each row shows the number of times a shopping event was recorded and how many distinct pseudonymous IDs recorded it on that date. Comparing those columns helps show when activity comes from repeat actions by the same IDs. Missing IDs still contribute to the event count, and adding daily distinct counts would count returning IDs more than once.
+For each day, I wanted to see how many times people viewed an item, added it to their cart, or made a purchase. Putting the event count next to the count of unique IDs helps me spot repeat activity. Events with a missing ID still count as events, and the same ID can appear in the totals on multiple days.
 
 ## 3. Compare daily purchase revenue by device
 
@@ -63,7 +63,7 @@ GROUP BY purchase_date, device_category
 ORDER BY purchase_date, purchase_revenue_usd DESC, device_category;
 ```
 
-This groups purchase event rows by day and device category and sums the recorded USD purchase revenue. I would use it to compare sales patterns and check whether some purchase events are missing revenue. Refunds are outside this calculation, and repeated purchase events can inflate the sum.
+I wanted to see how much purchase revenue came from each device type on a given day. The two counts also make it easy to spot days when purchases were recorded without a dollar amount. The totals are in USD before refunds, and duplicate purchase events could make them look higher.
 
 ## 4. Rank pages by recorded views
 
@@ -100,7 +100,7 @@ ORDER BY page_view_events DESC, page_url
 LIMIT 15;
 ```
 
-This extracts the string parameter `page_location` and ranks the 15 most-viewed URLs for the first week. I removed query strings and fragments so tagged links to the same URL can be counted together. This helps identify which pages get the most attention, though pages that use query strings to display different content can be combined.
+To see which pages got the most views in the first week, I pulled the URL from the `page_location` string parameter. I dropped query strings and fragments so links with different tracking tags count toward the same page. One trade-off is that URLs with query strings that change the actual content can get grouped together too.
 
 ## 5. Measure tracked engagement by device
 
@@ -129,7 +129,7 @@ GROUP BY device_category
 ORDER BY total_engagement_seconds DESC, device_category;
 ```
 
-This reads the integer `engagement_time_msec` parameter and converts milliseconds to seconds. Total seconds show how much engagement time was recorded on each device category, and the event counts show how often the parameter was populated. The average is calculated across events that carry a value, so its unit is seconds per measured event.
+I pulled `engagement_time_msec` as an integer and divided it by 1,000 so the numbers would be easier to read in seconds. By device type, I can compare the total tracked time and see how many events had an engagement value. The average only includes events with that value.
 
 ## 6. Identify first-visit and returning browser IDs
 
@@ -156,7 +156,7 @@ GROUP BY visitor_group
 ORDER BY visitor_group;
 ```
 
-The CTE builds one row per browser ID, then compares page viewing for IDs with and without a recorded first visit in November. I would use it to see whether first-visit IDs view fewer pages per ID during the month. The group without a first visit is a returning-visitor proxy because an event can be missing and one person can have several browser IDs.
+I used a CTE to get one row per browser ID before comparing how many pages each group viewed in November. I wanted to see if IDs with a recorded first visit looked at fewer pages on average. An ID without a first visit is my best guess at a returning visitor here, since events can be missing and someone can use more than one browser.
 
 ## 7. Find the share of November revenue by weekday
 
@@ -186,7 +186,7 @@ CROSS JOIN monthly_revenue AS m
 ORDER BY w.weekday_number;
 ```
 
-This joins each weekday's purchase revenue to a single monthly total so each row can show its share of November revenue. I would use the result to identify which weekdays contributed the most in this period. The percentages are shares of actual revenue in the window, so weekdays that occur more often can have a higher share.
+I wanted to know which days of the week brought in the biggest share of November's purchase revenue. I joined the weekday totals to the monthly total so I could calculate that percentage for each day of the week. Some weekdays occur more often in the month, which can give them a bigger share.
 
 ## 8. Measure progression from checkout to purchase
 
@@ -227,7 +227,7 @@ FROM session_steps
 WHERE first_checkout_at IS NOT NULL;
 ```
 
-This counts sessions with a checkout start that also recorded a purchase at a strictly later timestamp and reports the percentage. It pairs `user_pseudo_id` with `ga_session_id` because the session ID can be shared by different users. The result estimates checkout completion for the observed window. It excludes missing identifiers and timestamp ties, and a session that completes after the window can be counted as incomplete.
+Of the sessions that started checkout, how many went on to make a purchase? I used both the user ID and the session ID to keep different users' sessions from getting lumped together. A purchase counts only if its timestamp is later than the first checkout start in the same session. Sessions without both IDs are left out, and a purchase after November won't show up in this window.
 
 ## Appendix
 
