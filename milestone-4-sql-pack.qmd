@@ -1,0 +1,237 @@
+---
+title: "Milestone 4 · GA4 SQL Pack"
+author: "Spencer Conway"
+format:
+  html:
+    toc: true
+    code-copy: true
+    embed-resources: true
+---
+
+## Data and scope
+
+I used the public [Google Merchandise Store GA4 sample export](https://developers.google.com/analytics/bigquery/web-ecommerce-demo-dataset). The queries use GoogleSQL and focus on November 2020, with shorter windows where a spot check is enough. Each query can run independently in the BigQuery SQL editor. The constant `_TABLE_SUFFIX` filters select the daily tables to scan. The export is obfuscated, so IDs, URLs, and reported amounts should be interpreted as sample data.
+
+## 1. Inspect individual checkout events
+
+```sql
+SELECT
+  PARSE_DATE('%Y%m%d', event_date) AS activity_date,
+  TIMESTAMP_MICROS(event_timestamp) AS event_at_utc,
+  event_name,
+  user_pseudo_id,
+  device.category AS device_category
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201103'
+  AND event_name IN ('begin_checkout', 'purchase')
+ORDER BY event_timestamp DESC, event_name, user_pseudo_id
+LIMIT 25;
+```
+
+This query shows up to 25 recent checkout-start or purchase event rows from the first three days of November. I would use it to check whether both events are being captured and see the fields available on individual records. The report date follows the GA4 property's time zone, while the timestamp is displayed in UTC.
+
+## 2. Count daily shopping activity
+
+```sql
+SELECT
+  PARSE_DATE('%Y%m%d', event_date) AS activity_date,
+  event_name,
+  COUNT(*) AS event_count,
+  COUNT(DISTINCT user_pseudo_id) AS distinct_pseudo_users
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201130'
+  AND event_name IN ('view_item', 'add_to_cart', 'purchase')
+GROUP BY activity_date, event_name
+ORDER BY activity_date, event_name;
+```
+
+Each row shows the number of times a shopping event was recorded and how many distinct pseudonymous IDs recorded it on that date. Comparing those columns helps show when activity comes from repeat actions by the same IDs. Missing IDs still contribute to the event count, and adding daily distinct counts would count returning IDs more than once.
+
+## 3. Compare daily purchase revenue by device
+
+```sql
+SELECT
+  PARSE_DATE('%Y%m%d', event_date) AS purchase_date,
+  COALESCE(device.category, '(missing)') AS device_category,
+  COUNT(*) AS purchase_events,
+  COUNT(ecommerce.purchase_revenue_in_usd) AS events_with_revenue,
+  ROUND(SUM(ecommerce.purchase_revenue_in_usd), 2) AS purchase_revenue_usd
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201130'
+  AND event_name = 'purchase'
+GROUP BY purchase_date, device_category
+ORDER BY purchase_date, purchase_revenue_usd DESC, device_category;
+```
+
+This groups purchase event rows by day and device category and sums the recorded USD purchase revenue. I would use it to compare sales patterns and check whether some purchase events are missing revenue. Refunds are outside this calculation, and repeated purchase events can inflate the sum.
+
+## 4. Rank pages by recorded views
+
+```sql
+WITH page_views AS (
+  SELECT
+    user_pseudo_id,
+    (
+      SELECT p.value.string_value
+      FROM UNNEST(event_params) AS p WITH OFFSET AS position
+      WHERE p.key = 'page_location'
+      ORDER BY position
+      LIMIT 1
+    ) AS page_url
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201107'
+    AND event_name = 'page_view'
+),
+cleaned_urls AS (
+  SELECT
+    user_pseudo_id,
+    REGEXP_REPLACE(TRIM(page_url), r'[?#].*$', '') AS page_url
+  FROM page_views
+)
+SELECT
+  page_url,
+  COUNT(*) AS page_view_events,
+  COUNT(DISTINCT user_pseudo_id) AS distinct_viewers
+FROM cleaned_urls
+WHERE STARTS_WITH(page_url, 'https://')
+   OR STARTS_WITH(page_url, 'http://')
+GROUP BY page_url
+ORDER BY page_view_events DESC, page_url
+LIMIT 15;
+```
+
+This extracts the string parameter `page_location` and ranks the 15 most-viewed URLs for the first week. I removed query strings and fragments so tagged links to the same URL can be counted together. This helps identify which pages get the most attention, though pages that use query strings to display different content can be combined.
+
+## 5. Measure tracked engagement by device
+
+```sql
+WITH engagement_events AS (
+  SELECT
+    COALESCE(device.category, '(missing)') AS device_category,
+    (
+      SELECT p.value.int_value
+      FROM UNNEST(event_params) AS p WITH OFFSET AS position
+      WHERE p.key = 'engagement_time_msec'
+      ORDER BY position
+      LIMIT 1
+    ) AS engagement_ms
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201107'
+)
+SELECT
+  device_category,
+  COUNT(*) AS all_events,
+  COUNT(engagement_ms) AS events_with_engagement_time,
+  ROUND(SUM(engagement_ms) / 1000.0, 1) AS total_engagement_seconds,
+  ROUND(AVG(engagement_ms) / 1000.0, 2) AS avg_seconds_per_measured_event
+FROM engagement_events
+GROUP BY device_category
+ORDER BY total_engagement_seconds DESC, device_category;
+```
+
+This reads the integer `engagement_time_msec` parameter and converts milliseconds to seconds. Total seconds show how much engagement time was recorded on each device category, and the event counts show how often the parameter was populated. The average is calculated across events that carry a value, so its unit is seconds per measured event.
+
+## 6. Identify first-visit and returning browser IDs
+
+```sql
+WITH activity_by_id AS (
+  SELECT
+    user_pseudo_id,
+    COUNTIF(event_name = 'first_visit') > 0 AS has_first_visit,
+    COUNTIF(event_name = 'page_view') AS page_view_events
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201130'
+    AND event_name IN ('page_view', 'first_visit')
+    AND user_pseudo_id IS NOT NULL
+  GROUP BY user_pseudo_id
+)
+SELECT
+  IF(has_first_visit, 'First visit recorded', 'No first visit recorded') AS visitor_group,
+  COUNT(*) AS distinct_pseudo_users,
+  SUM(page_view_events) AS total_page_views,
+  ROUND(AVG(page_view_events), 2) AS avg_page_views_per_id
+FROM activity_by_id
+WHERE page_view_events > 0
+GROUP BY visitor_group
+ORDER BY visitor_group;
+```
+
+The CTE builds one row per browser ID, then compares page viewing for IDs with and without a recorded first visit in November. I would use it to see whether first-visit IDs view fewer pages per ID during the month. The group without a first visit is a returning-visitor proxy because an event can be missing and one person can have several browser IDs.
+
+## 7. Find the share of November revenue by weekday
+
+```sql
+WITH weekday_revenue AS (
+  SELECT
+    EXTRACT(DAYOFWEEK FROM PARSE_DATE('%Y%m%d', event_date)) AS weekday_number,
+    FORMAT_DATE('%A', PARSE_DATE('%Y%m%d', event_date)) AS weekday_name,
+    SUM(ecommerce.purchase_revenue_in_usd) AS revenue_usd
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201130'
+    AND event_name = 'purchase'
+    AND ecommerce.purchase_revenue_in_usd IS NOT NULL
+  GROUP BY weekday_number, weekday_name
+),
+monthly_revenue AS (
+  SELECT SUM(revenue_usd) AS total_revenue_usd
+  FROM weekday_revenue
+)
+SELECT
+  w.weekday_name,
+  ROUND(w.revenue_usd, 2) AS revenue_usd,
+  ROUND(100 * SAFE_DIVIDE(w.revenue_usd, m.total_revenue_usd), 2)
+    AS pct_of_monthly_revenue
+FROM weekday_revenue AS w
+CROSS JOIN monthly_revenue AS m
+ORDER BY w.weekday_number;
+```
+
+This joins each weekday's purchase revenue to a single monthly total so each row can show its share of November revenue. I would use the result to identify which weekdays contributed the most in this period. The percentages are shares of actual revenue in the window, so weekdays that occur more often can have a higher share.
+
+## 8. Measure progression from checkout to purchase
+
+```sql
+WITH checkout_events AS (
+  SELECT
+    user_pseudo_id,
+    (
+      SELECT p.value.int_value
+      FROM UNNEST(event_params) AS p WITH OFFSET AS position
+      WHERE p.key = 'ga_session_id'
+      ORDER BY position
+      LIMIT 1
+    ) AS session_id,
+    event_name,
+    event_timestamp
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20201101' AND '20201130'
+    AND event_name IN ('begin_checkout', 'purchase')
+    AND user_pseudo_id IS NOT NULL
+),
+session_steps AS (
+  SELECT
+    user_pseudo_id,
+    session_id,
+    MIN(IF(event_name = 'begin_checkout', event_timestamp, NULL)) AS first_checkout_at,
+    MAX(IF(event_name = 'purchase', event_timestamp, NULL)) AS last_purchase_at
+  FROM checkout_events
+  WHERE session_id IS NOT NULL
+  GROUP BY user_pseudo_id, session_id
+)
+SELECT
+  COUNT(*) AS sessions_that_started_checkout,
+  COUNTIF(last_purchase_at > first_checkout_at) AS sessions_with_later_purchase,
+  ROUND(100 * SAFE_DIVIDE(COUNTIF(last_purchase_at > first_checkout_at), COUNT(*)), 2)
+    AS checkout_to_purchase_pct
+FROM session_steps
+WHERE first_checkout_at IS NOT NULL;
+```
+
+This counts sessions with a checkout start that also recorded a purchase at a strictly later timestamp and reports the percentage. It pairs `user_pseudo_id` with `ga_session_id` because the session ID can be shared by different users. The result estimates checkout completion for the observed window. It excludes missing identifiers and timestamp ties, and a session that completes after the window can be counted as incomplete.
+
+## Appendix
+
+- [GitHub repository](https://github.com/spencerconway0/ibm-6500-sql-learning-portfolio)
+- [GitHub Pages report](https://spencerconway0.github.io/ibm-6500-sql-learning-portfolio/milestone-4-sql-pack.html)
+- [Google's GA4 BigQuery query examples](https://developers.google.com/analytics/bigquery/basic-queries)
+- [GA4 BigQuery export schema](https://support.google.com/analytics/answer/7029846)
